@@ -14,39 +14,38 @@ class OurPoint {
   
   //private datas
   private:
-    int x;
-    int y;
-    int z;
+    double x;
+    double y;
+    double z;
+	int returns;
     preProcClass preClass;
 
   //public methods
   public:
-    OurPoint(int x1, int y1, int z1) {
-      x = x1;
-      y = y1;
-      z = z1;
-      preClass = undef;
-    }
+    OurPoint (double x_, double y_, double z_, int returns_) : 
+      x(x_), y(y_), z(z_), preClass(undef), returns(returns_) {}
 
     ~OurPoint() {}
 
     //getters
-    const int getX() { return x; }
-    const int getY() { return y; }
-    const int getZ() { return z; }
-    const preProcClass getPreClass() { return preClass; }
+    double getX() const { return x; }
+    double getY() const { return y; }
+    double getZ() const { return z; }
+	int getReturns() const { return returns; }
+    preProcClass getPreClass() const { return preClass; }
 
     //setters
-    void setX(int x1) { x = x1; }
-    void setY(int y1) { y = y1; }
-    void setZ(int z1) { z = z1; }
+    void setX(double x1) { x = x1; }
+    void setY(double y1) { y = y1; }
+    void setZ(double z1) { z = z1; }
+	void setReturns(int ret) { returns = ret; }
     void setPreClass(preProcClass p1) { preClass = p1; }
 
     //other methods
-    const double distanceFrom(const OurPoint* p2) {
-      return std::sqrt( (p2->x - x) * (p2->x - x) +
-                   (p2->y - y) * (p2->y - y) + 
-                   (p2->z - z) * (p2->z - z) );
+    double distanceFrom(const OurPoint& p2) {
+      return std::sqrt( (p2.x - x) * (p2.x - x) +
+                   (p2.y - y) * (p2.y - y) + 
+                   (p2.z - z) * (p2.z - z) );
     }
 };
 

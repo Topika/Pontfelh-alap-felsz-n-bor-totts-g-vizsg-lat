@@ -2,6 +2,7 @@
 #include <fstream>  // std::ifstream
 #include <iostream> // std::cout
 #include "boost/polygon/voronoi.hpp"
+#include "headers/OurPoint.h"
 
 using boost::polygon::voronoi_builder;
 using boost::polygon::voronoi_diagram;
@@ -9,64 +10,57 @@ using boost::polygon::voronoi_diagram;
 using namespace std;
 using namespace boost::polygon;
 
-//~ struct OurPoint {
-  //~ int x;
-  //~ int y;
-  //~ int z;
-  //~ int returns;
-  //~ OurPoint (int x_, int y_, int z_, int returns_) : x(x_), y(y_), z(z_), returns(returns_) {}
-//~ };
-//~ 
-//~ template <>
-//~ struct boost::polygon::geometry_concept<OurPoint> { typedef point_concept type; };
-   //~ 
-//~ template <>
-//~ struct boost::polygon::point_traits<OurPoint> {
-  //~ typedef int coordinate_type;
-    //~ 
-  //~ static inline coordinate_type get(const OurPoint& point, orientation_2d orient) {
-    //~ return (orient == HORIZONTAL) ? point.x : point.y;
-  //~ }
-//~ };
-
-struct OurPoint {
-  double x;
-  double y;
-  double z;
-  int returns;
-  OurPoint (double x_, double y_, double z_, int returns_) : x(x_), y(y_), z(z_), returns(returns_) {}
-};
-
-
 namespace boost {
 namespace polygon {
 
-template <>
-struct geometry_concept<OurPoint> {
-  typedef point_concept type;
-};
+  template <>
+  struct geometry_concept<OurPoint> {
+    typedef point_concept type;
+  };
 
-template <>
-struct point_traits<OurPoint> {
-  typedef int coordinate_type;
+  template <>
+  struct point_traits<OurPoint> {
+    typedef int coordinate_type;
 
-  static inline coordinate_type get(
-      const OurPoint& point, orientation_2d orient) {
-    return (orient == HORIZONTAL) ? point.x : point.y;
-  }
-};
+    static inline coordinate_type get(
+        const OurPoint& point, orientation_2d orient) {
+      return (orient == HORIZONTAL) ? point.getX() : point.getY();
+    }
+  };
 }  // polygon
 }  // boost
 
+const double s1 = 200.0; //?
 
-//~ class OurPoint : public point_data<double> {
-    //~ public:
-        //~ OurPoint(double x_, double y_, double z_, uint16_t returns_, uint16_t intensity_) : point_data<double>(x_,y_) , z(z_), returns(returns_), intensity(intensity_) {}
-    //~ private:
-        //~ double z;
-        //~ uint16_t returns,intensity;
-        //~ 
-//~ };
+/*
+-- Get the examined point, and its neighbours. Calculate the class
+-- of the point with the threshold s1 
+
+preProcClass classCalculate(OurPoint p, const vector<OurPoint> neighbours) {
+  preProcClass resultClass = undef;
+    
+  bool isInside, isUpper, isLower = false; 
+  for (auto nPoint : neighbours) {
+    double distance = nPoint.distanceFrom(p);
+    if (distance < (-1 * s1)) {
+       isLower = true;
+    } else if (distance > s1) {
+      isUpper = true;
+    } else {
+      isInside = true;
+    }
+  }
+
+  if (isInside & !isLower & !isUpper) {
+    resultClass = uniformSurface;			//it can be nonuniformSurface too, TODO
+  } else if (isInside & isLower & !isUpper) {
+    resultClass = lowerContour;
+  } else if (isInside & !isLower & isUpper) {
+     resultClass = upperContour;
+  }
+  return resultClass;
+}
+*/
 
 
 int iterate_cells(const voronoi_diagram<double> &vd) {
@@ -78,6 +72,10 @@ int iterate_cells(const voronoi_diagram<double> &vd) {
        it != vd.cells().end(); ++it) {
     const voronoi_diagram<double>::cell_type &cell = *it;
     ofs << it->source_index() << std::endl;
+	
+	// todo get neighbours
+	// preProcClass actualPointClass = classCalculate("point", "neighbours");
+	// "point".setPreClass(actualPointClass);
   }
   ofs.close();
 }
@@ -86,24 +84,18 @@ int iterate_cells(const voronoi_diagram<double> &vd) {
 int main(int argc, char* argv[]) {
 	std::ifstream ifs;
     
-    std::vector<OurPoint> points;
-    //~ std::vector<point_data<double> > points;
-    
+    std::vector<OurPoint> points;    
     
     cout<<__LINE__<<std::endl;
-	ifs.open("sample1.las", std::ios::in | std::ios::binary);
+	ifs.open("../data/sample1.las", std::ios::in | std::ios::binary);
 	liblas::ReaderFactory f;
-    cout<<__LINE__<<std::endl;
 	liblas::Reader reader = f.CreateWithStream(ifs);
 	liblas::Header const& header = reader.GetHeader();
 	std::cout << "Compressed: " << header.Compressed();
-    cout<<__LINE__<<std::endl;
 	std::cout << "Signature: " << header.GetFileSignature() << '\n';
-    cout<<__LINE__<<std::endl;
 	std::cout << "Points count: " << header.GetPointRecordsCount() << '\n';
-    cout<<__LINE__<<std::endl;
-    //~ The voronoi diagram
     
+	//~ The voronoi diagram
     voronoi_diagram<double> vd;
     
 	while (reader.ReadNextPoint())
