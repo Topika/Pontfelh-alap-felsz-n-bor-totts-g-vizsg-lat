@@ -42,10 +42,8 @@ class OurPoint {
     void setPreClass(preProcClass p1) { preClass = p1; }
 
     //other methods
-    double distanceFrom(const OurPoint& p2) {
-      return std::sqrt( (p2.x - x) * (p2.x - x) +
-                   (p2.y - y) * (p2.y - y) + 
-                   (p2.z - z) * (p2.z - z) );
+    double distanceFromInZ(const OurPoint& p2) {
+      return (p2.z - z);
     }
 };
 

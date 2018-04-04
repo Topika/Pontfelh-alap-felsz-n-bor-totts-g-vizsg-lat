@@ -41,7 +41,7 @@ preProcClass classCalculate(OurPoint p, const vector<OurPoint> neighbours) {
     
   bool isInside, isUpper, isLower = false; 
   for (auto nPoint : neighbours) {
-    double distance = nPoint.distanceFrom(p);
+    double distance = nPoint.distanceFromInZ(p);
     if (distance < (-1 * s1)) {
        isLower = true;
     } else if (distance > s1) {
