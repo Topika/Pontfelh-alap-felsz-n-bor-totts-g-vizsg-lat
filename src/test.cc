@@ -80,8 +80,8 @@ vector<OurPoint> getNeighboursOfPoint(const voronoi_diagram<double>::cell_type &
 }
 
 void iterateCells(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
-	std::ofstream ofs;
-	ofs.open("file.txt", std::ofstream::out | std::ofstream::app);
+	//std::ofstream ofs;
+	//ofs.open("file.txt", std::ofstream::out | std::ofstream::app);
 	int upperCnt = 0, lowerCnt = 0, surfaceCnt = 0, undefCnt = 0;
 
 	for (auto it = vd.cells().begin(); it != vd.cells().end(); ++it)
@@ -102,11 +102,16 @@ void iterateCells(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inpu
 			default: ++undefCnt; break;
 		}
 	}
-	ofs << "Upper: " << upperCnt << std::endl
+	std::cout << "The calculated classes are:" << std::endl 
+		<< "Upper contour: " << upperCnt << std::endl
+		<< "Lower contour: " << lowerCnt << std::endl
+		<< "Surface: " << surfaceCnt << std::endl
+		<< "Other: " << undefCnt << std::endl;
+	/*ofs << "Upper: " << upperCnt << std::endl
 		<< "Lower: " << lowerCnt << std::endl
 		<< "Surface: " << surfaceCnt << std::endl
 		<< "Other: " << undefCnt << std::endl;
-	ofs.close();
+	ofs.close();*/
 }
 
 int main(int argc, char* argv[]) {
@@ -118,10 +123,12 @@ int main(int argc, char* argv[]) {
 	liblas::ReaderFactory f;
 	liblas::Reader reader = f.CreateWithStream(ifs);
 	liblas::Header const& header = reader.GetHeader();
+	std::cout << std::endl << "1) Read 'sample1.las', which has the next information:" << std::endl;
 	std::cout << "Compressed: " << header.Compressed() << '\n';
 	//std::cout << "Signature: " << header.GetFileSignature() << '\n';
 	std::cout << "Points count: " << header.GetPointRecordsCount() << '\n';
-    
+    std::cout << std::endl << "--------------------------------------------------------" << std::endl;
+
 	//~ The voronoi diagram
 	voronoi_diagram<double> vd;
 
@@ -136,10 +143,13 @@ int main(int argc, char* argv[]) {
 	}
 	construct_voronoi(points.begin(), points.end(), &vd);
 
-	std::cout << "Num of cells: " << vd.num_cells() << std::endl;
-	std::cout << "Num of edges: " << vd.num_edges() << std::endl;
-    
+	std::cout << std::endl << "2) Finished the calculation of voronoi diagram. The result is:" << std::endl; 
+	std::cout << "Number of cells: " << vd.num_cells() << std::endl;
+	std::cout << "Number of edges: " << vd.num_edges() << std::endl;
+    std::cout << std::endl << "--------------------------------------------------------" << std::endl;
+    std::cout << "3) Start to examine all the points and their neighbours, to calculate the first segmentation to surfaces and contours..." << std::endl;
 	iterateCells(vd, points);
+	
 	return 0;
 }
 
