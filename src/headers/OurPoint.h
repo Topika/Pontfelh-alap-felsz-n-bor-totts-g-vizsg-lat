@@ -42,7 +42,7 @@ class OurPoint {
     void setPreClass(preProcClass p1) { preClass = p1; }
 
     //other methods
-    double distanceFromInZ(const OurPoint& p2) {
+    double distanceFromInZ(const OurPoint& p2) const {
       return (p2.z - z);
     }
 };

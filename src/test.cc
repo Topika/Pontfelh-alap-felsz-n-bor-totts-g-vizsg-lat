@@ -30,53 +30,83 @@ namespace polygon {
 }  // polygon
 }  // boost
 
-const double s1 = 200.0; //?
+const double s1 = 2000.0; //?
 
 /*
 -- Get the examined point, and its neighbours. Calculate the class
 -- of the point with the threshold s1 
-
-preProcClass classCalculate(OurPoint p, const vector<OurPoint> neighbours) {
+*/
+preProcClass classCalculate(const OurPoint &p, const vector<OurPoint> &neighbours) {
   preProcClass resultClass = undef;
     
   bool isInside, isUpper, isLower = false; 
-  for (auto nPoint : neighbours) {
+  for (auto nPoint : neighbours)
+  {
     double distance = nPoint.distanceFromInZ(p);
-    if (distance < (-1 * s1)) {
+    if (distance < (-1 * s1))
        isLower = true;
-    } else if (distance > s1) {
+    else if (distance > s1)
       isUpper = true;
-    } else {
+    else
       isInside = true;
-    }
   }
 
-  if (isInside & !isLower & !isUpper) {
-    resultClass = uniformSurface;			//it can be nonuniformSurface too, TODO
-  } else if (isInside & isLower & !isUpper) {
+  if (isInside && !isLower && !isUpper)
+    resultClass = uniformSurface; // it can be nonuniformSurface too, TODO
+  else if (isInside && isLower && !isUpper)
     resultClass = lowerContour;
-  } else if (isInside & !isLower & isUpper) {
+  else if (isInside && !isLower && isUpper)
      resultClass = upperContour;
-  }
+
   return resultClass;
 }
-*/
 
-
-int iterate_cells(const voronoi_diagram<double> &vd) {
-  std::ofstream ofs;
-  
-  ofs.open("file.txt", std::ofstream::out | std::ofstream::app);
-  
-  for (auto it = vd.cells().begin();
-       it != vd.cells().end(); ++it) {
-    const voronoi_diagram<double>::cell_type &cell = *it;
-    ofs << it->source_index() << std::endl;
-	
-	// todo get neighbours
-	// preProcClass actualPointClass = classCalculate("point", "neighbours");
-	// "point".setPreClass(actualPointClass);
+vector<OurPoint> getNeighboursOfPoint(const voronoi_diagram<double>::cell_type &point, const std::vector<OurPoint> &inputPoints) {
+  vector<OurPoint> result;
+  if (point.contains_point() && !point.is_degenerate())
+  {
+    const voronoi_diagram<double>::edge_type *edge = point.incident_edge();
+    do
+    {
+      if (edge->is_primary())
+      {
+        auto index = edge->twin()->cell()->source_index();
+        result.push_back(inputPoints[index]);
+      }
+      edge = edge->next();
+    } while (edge != point.incident_edge());
   }
+  return result;
+}
+
+
+void iterateCells(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
+  std::ofstream ofs;
+  ofs.open("file.txt", std::ofstream::out | std::ofstream::app);
+  int upperCnt = 0, lowerCnt = 0, surfaceCnt = 0, undefCnt = 0;
+  
+  for (auto it = vd.cells().begin(); it != vd.cells().end(); ++it)
+  {
+    const voronoi_diagram<double>::cell_type &cell = *it;
+    //ofs << it->source_index() << std::endl;
+  
+    OurPoint& currentPoint = inputPoints[cell.source_index()];
+    preProcClass actualPointClass = classCalculate(currentPoint, getNeighboursOfPoint(cell, inputPoints));
+    currentPoint.setPreClass(actualPointClass);
+    
+    switch (currentPoint.getPreClass())
+    {
+    case upperContour: ++upperCnt; break;
+    case lowerContour: ++lowerCnt; break;
+    case uniformSurface:
+    case nonUniformSurface: ++surfaceCnt; break;
+    default: ++undefCnt; break;
+    }
+  }
+  ofs << "Upper: " << upperCnt << std::endl
+	  << "Lower: " << lowerCnt << std::endl
+	  << "Surface: " << surfaceCnt << std::endl
+	  << "Other: " << undefCnt << std::endl;
   ofs.close();
 }
 
@@ -91,8 +121,8 @@ int main(int argc, char* argv[]) {
 	liblas::ReaderFactory f;
 	liblas::Reader reader = f.CreateWithStream(ifs);
 	liblas::Header const& header = reader.GetHeader();
-	std::cout << "Compressed: " << header.Compressed();
-	std::cout << "Signature: " << header.GetFileSignature() << '\n';
+	std::cout << "Compressed: " << header.Compressed() << '\n';
+	//std::cout << "Signature: " << header.GetFileSignature() << '\n';
 	std::cout << "Points count: " << header.GetPointRecordsCount() << '\n';
     
 	//~ The voronoi diagram
@@ -111,5 +141,6 @@ int main(int argc, char* argv[]) {
     
     std::cout << "Num of cells: " << vd.num_cells() << std::endl;
     std::cout << "Num of edges: " << vd.num_edges() << std::endl;
-    iterate_cells(vd);
+    
+	iterateCells(vd, points);
 }
