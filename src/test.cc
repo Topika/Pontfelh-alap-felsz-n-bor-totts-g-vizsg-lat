@@ -30,7 +30,8 @@ namespace polygon {
 }  // polygon
 }  // boost
 
-const double s1 = 2000.0; //?
+const double s1 = 2000.0; // surface/contour threshold 
+const double s2 = s1/2;   // uniform/non-uniform surface threshold
 
 /*
 -- Get the examined point, and its neighbours. Calculate the class
@@ -39,7 +40,7 @@ const double s1 = 2000.0; //?
 preProcClass classCalculate(const OurPoint &p, const vector<OurPoint> &neighbours) {
 	preProcClass resultClass = undef;
     
-	bool isInside, isUpper, isLower = false; 
+	bool isInAndClose = false, isInAndFar = false, isUpper = false, isLower = false;
 	for (auto nPoint : neighbours)
 	{
 		double distance = nPoint.distanceFromInZ(p);
@@ -47,15 +48,19 @@ preProcClass classCalculate(const OurPoint &p, const vector<OurPoint> &neighbour
 			isLower = true;
 		else if (distance > s1)
 			isUpper = true;
+		else if (distance >= (-1*s2) && distance <=s2) 
+			isInAndClose = true;
 		else
-			isInside = true;
+			isInAndFar = true;
 	}
 
-	if (isInside && !isLower && !isUpper)
-		resultClass = uniformSurface; // it can be nonuniformSurface too, TODO
-	else if (isInside && isLower && !isUpper)
+	if (isInAndFar && !isLower && !isUpper)
+		resultClass = nonUniformSurface;
+	else if (isInAndClose && !isInAndFar && !isLower && !isUpper)
+		resultClass = uniformSurface;
+	else if ((isInAndFar || isInAndClose) && isLower && !isUpper)
 		resultClass = lowerContour;
-	else if (isInside && !isLower && isUpper)
+	else if ((isInAndFar || isInAndClose) && !isLower && isUpper)
 		resultClass = upperContour;
 
 	return resultClass;
@@ -82,7 +87,7 @@ vector<OurPoint> getNeighboursOfPoint(const voronoi_diagram<double>::cell_type &
 void iterateCells(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
 	//std::ofstream ofs;
 	//ofs.open("file.txt", std::ofstream::out | std::ofstream::app);
-	int upperCnt = 0, lowerCnt = 0, surfaceCnt = 0, undefCnt = 0;
+	int upperCnt = 0, lowerCnt = 0, uniformCnt = 0, nonUniformCnt = 0,undefCnt = 0;
 
 	for (auto it = vd.cells().begin(); it != vd.cells().end(); ++it)
 	{
@@ -97,15 +102,16 @@ void iterateCells(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inpu
 		{
 			case upperContour: ++upperCnt; break;
 			case lowerContour: ++lowerCnt; break;
-			case uniformSurface:
-			case nonUniformSurface: ++surfaceCnt; break;
+			case uniformSurface: ++uniformCnt; break;
+			case nonUniformSurface: ++nonUniformCnt; break;
 			default: ++undefCnt; break;
 		}
 	}
 	std::cout << "The calculated classes are:" << std::endl 
 		<< "Upper contour: " << upperCnt << std::endl
 		<< "Lower contour: " << lowerCnt << std::endl
-		<< "Surface: " << surfaceCnt << std::endl
+		<< "Uniform surface: " << uniformCnt << std::endl
+		<< "Non-uniform surface: " << nonUniformCnt << std::endl
 		<< "Other: " << undefCnt << std::endl;
 	/*ofs << "Upper: " << upperCnt << std::endl
 		<< "Lower: " << lowerCnt << std::endl
