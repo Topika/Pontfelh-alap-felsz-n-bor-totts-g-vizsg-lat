@@ -6,8 +6,8 @@
 
 enum preProcClass {
 	undef,
-	upperContour, lowerContour,
-	uniformSurface, nonUniformSurface
+	upperContour = 6, lowerContour = 4,
+	uniformSurface = 2, nonUniformSurface = 9
 };
 
 class OurPoint {

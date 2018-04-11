@@ -155,6 +155,23 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl << "--------------------------------------------------------" << std::endl;
     std::cout << "3) Start to examine all the points and their neighbours, to calculate the first segmentation to surfaces and contours..." << std::endl;
 	iterateCells(vd, points);
+
+
+	std::ofstream ofs("custom_classes.las", ios::out | ios::binary);
+	liblas::Writer writer(ofs, header);
+
+	for (auto point : points)
+	{
+		liblas::Point output(&header);
+		output.SetRawX(point.getX());
+		output.SetRawY(point.getY());
+		output.SetRawZ(point.getZ());
+		liblas::Classification customClass;
+		customClass.SetClass(point.getPreClass());
+		// customClass.SetClass(point.getPreClass() == undef ? 9 : 12); // separating undef category only
+		output.SetClassification(customClass);
+		writer.WritePoint(output);
+	}
 	
 	return 0;
 }
