@@ -123,8 +123,6 @@ void iterateCells(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inpu
 int main(int argc, char* argv[]) {
 	std::ifstream ifs;
 
-	std::vector<OurPoint> points;    
-
 	ifs.open("../data/sample1.las", std::ios::in | std::ios::binary);
 	liblas::ReaderFactory f;
 	liblas::Reader reader = f.CreateWithStream(ifs);
@@ -135,6 +133,8 @@ int main(int argc, char* argv[]) {
 	std::cout << "Points count: " << header.GetPointRecordsCount() << '\n';
     std::cout << std::endl << "--------------------------------------------------------" << std::endl;
 
+	std::vector<OurPoint> points;
+	points.reserve(header.GetPointRecordsCount());
 	//~ The voronoi diagram
 	voronoi_diagram<double> vd;
 
