@@ -1,12 +1,14 @@
 #ifndef OURPOINT_H
 #define OURPOINT_H
 
-enum preProcClass {
-	undef,
-	upperContour, lowerContour,
-	uniformSurface, nonUniformSurface
+#include <iostream>
+#include <cmath>
 
-	, roof // temporarily added
+enum preProcClass {
+	undef=-1,
+	upperContour = 0, lowerContour = 1,
+	uniformSurface = 2, nonUniformSurface = 3
+, roof //temporarrily added
 };
 
 class OurPoint {
@@ -15,7 +17,7 @@ class OurPoint {
 		long x;
 		long y;
 		long z;
-			int returns;
+		int returns;
 		preProcClass preClass;
 
 	//public methods
@@ -36,7 +38,7 @@ class OurPoint {
 	void setX(long x1) { x = x1; }
 	void setY(long y1) { y = y1; }
 	void setZ(long z1) { z = z1; }
-		void setReturns(int ret) { returns = ret; }
+	void setReturns(int ret) { returns = ret; }
 	void setPreClass(preProcClass p1) { preClass = p1; }
 
 	//other methods

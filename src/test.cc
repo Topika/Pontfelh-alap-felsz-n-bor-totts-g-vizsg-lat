@@ -4,6 +4,7 @@
 #include <functional>
 #include "boost/polygon/voronoi.hpp"
 #include "headers/OurPoint.h"
+#include "headers/imagewriter.hh"
 
 using boost::polygon::voronoi_builder;
 using boost::polygon::voronoi_diagram;
@@ -119,7 +120,7 @@ vector<OurPoint> getNeighboursOfPoint(const voronoi_diagram<double>::cell_type &
 bool checkNeighbourPoints(bool every, std::function<bool(const voronoi_diagram<double>::cell_type&, const OurPoint&)> condition,
 	const voronoi_diagram<double>::cell_type &cell, const std::vector<OurPoint> &inputPoints)
 {
-	bool default = every ? true : false;
+	bool default_ = every ? true : false;
 	if (cell.contains_point() && !cell.is_degenerate())
 	{
 		const voronoi_diagram<double>::edge_type *edge = cell.incident_edge();
@@ -130,13 +131,13 @@ bool checkNeighbourPoints(bool every, std::function<bool(const voronoi_diagram<d
 				const voronoi_diagram<double>::cell_type &nextCell = *edge->twin()->cell();
 				if (nextCell.contains_point() && !nextCell.is_degenerate())
 				{
-					if (condition(nextCell, inputPoints[nextCell.source_index()])) return !default;
+					if (condition(nextCell, inputPoints[nextCell.source_index()])) return !default_;
 				}
 			}
 			edge = edge->next();
 		} while (edge != cell.incident_edge());
 	}
-	return default;
+	return default_;
 }
 
 void modifyNeighbourPoints(std::function<void(const voronoi_diagram<double>::cell_type&, OurPoint&)> fn,
@@ -367,6 +368,8 @@ int translatePreProcClass_binary(bool condition)
 
 int main(int argc, char* argv[]) {
 	std::ifstream ifs;
+    std::ofstream of("o.txt");
+    of.close();
 
 	ifs.open("../data/sample1.las", std::ios::in | std::ios::binary);
 	liblas::ReaderFactory f;
@@ -434,6 +437,12 @@ int main(int argc, char* argv[]) {
 		output.SetClassification(customClass);
 		writer.WritePoint(output);
 	}
+
+    ImageWriter imgwriter(header.GetMinX() / header.GetScaleX(),header.GetMinY() / header.GetScaleY(),header.GetMaxX() / header.GetScaleX() ,header.GetMaxY() / header.GetScaleY());
+    for(auto point : points) {
+        imgwriter.addPoint(point);
+    }
+    imgwriter.writeToFile("outfile.png");
 
 	return 0;
 }
