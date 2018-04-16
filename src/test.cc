@@ -34,6 +34,35 @@ long SCALE_Z; // current las file scale value
 long PRIMARY_TRESHOLD; // surface/contour threshold
 long SECONDARY_TRESHOLD;   // uniform/non-uniform surface threshold
 
+preProcClass classCalculate_SSE(const OurPoint &p, const vector<OurPoint> &neighbours) {
+	preProcClass resultClass = undef;
+
+	bool isUpper = false, isLower = false;
+	double SSE = 0.0;
+	const double limit = 1000.0; // ~SECONDARY_TRESHOLD
+	for (auto nPoint : neighbours)
+	{
+		long distance = nPoint.distanceFromInZ(p);
+		SSE += pow(distance, 2);
+		if (distance < (-1 * PRIMARY_TRESHOLD))
+			isLower = true;
+		else if (distance > PRIMARY_TRESHOLD)
+			isUpper = true;
+	}
+	SSE /= neighbours.size();
+
+	if (SSE > pow(limit, 2) && !isLower && !isUpper)
+		resultClass = nonUniformSurface;
+	else if (!isLower && !isUpper)
+		resultClass = uniformSurface;
+	else if (isLower && !isUpper)
+		resultClass = lowerContour;
+	else if (!isLower && isUpper)
+		resultClass = upperContour;
+
+	return resultClass;
+}
+
 /*
 -- Get the examined point, and its neighbours. Calculate the class
 -- of the point with the PRIMARY_TRESHOLD
