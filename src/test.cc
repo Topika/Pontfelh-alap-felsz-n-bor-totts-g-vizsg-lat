@@ -30,12 +30,13 @@ namespace polygon {
 }  // polygon
 }  // boost
 
-const double s1 = 2000.0; // surface/contour threshold 
-const double s2 = s1/2;   // uniform/non-uniform surface threshold
+long SCALE_Z; // current las file scale value
+long PRIMARY_TRESHOLD; // surface/contour threshold
+long SECONDARY_TRESHOLD;   // uniform/non-uniform surface threshold
 
 /*
 -- Get the examined point, and its neighbours. Calculate the class
--- of the point with the threshold s1 
+-- of the point with the PRIMARY_TRESHOLD
 */
 preProcClass classCalculate(const OurPoint &p, const vector<OurPoint> &neighbours) {
 	preProcClass resultClass = undef;
@@ -43,12 +44,12 @@ preProcClass classCalculate(const OurPoint &p, const vector<OurPoint> &neighbour
 	bool isInAndClose = false, isInAndFar = false, isUpper = false, isLower = false;
 	for (auto nPoint : neighbours)
 	{
-		double distance = nPoint.distanceFromInZ(p);
-		if (distance < (-1 * s1))
+		long distance = nPoint.distanceFromInZ(p);
+		if (distance < (-1 * PRIMARY_TRESHOLD))
 			isLower = true;
-		else if (distance > s1)
+		else if (distance > PRIMARY_TRESHOLD)
 			isUpper = true;
-		else if (distance >= (-1*s2) && distance <=s2) 
+		else if (distance >= (-1 * SECONDARY_TRESHOLD) && distance <= SECONDARY_TRESHOLD)
 			isInAndClose = true;
 		else
 			isInAndFar = true;
@@ -95,8 +96,8 @@ void iterateCells(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inpu
 		//ofs << it->source_index() << std::endl;
 
 		OurPoint& currentPoint = inputPoints[cell.source_index()];
-		preProcClass actualPointClass = classCalculate(currentPoint, getNeighboursOfPoint(cell, inputPoints));
-		currentPoint.setPreClass(actualPointClass);
+		preProcClass currentPointClass = classCalculate(currentPoint, getNeighboursOfPoint(cell, inputPoints));
+		currentPoint.setPreClass(currentPointClass);
 
 		switch (currentPoint.getPreClass())
 		{
@@ -133,6 +134,10 @@ int main(int argc, char* argv[]) {
 	std::cout << "Points count: " << header.GetPointRecordsCount() << '\n';
     std::cout << std::endl << "--------------------------------------------------------" << std::endl;
 
+	SCALE_Z = (long)(1.0 / header.GetScaleZ());
+	PRIMARY_TRESHOLD = 2 * SCALE_Z;
+	SECONDARY_TRESHOLD = PRIMARY_TRESHOLD / 2;
+
 	std::vector<OurPoint> points;
 	points.reserve(header.GetPointRecordsCount());
 	//~ The voronoi diagram
@@ -154,6 +159,7 @@ int main(int argc, char* argv[]) {
 	std::cout << "Number of edges: " << vd.num_edges() << std::endl;
     std::cout << std::endl << "--------------------------------------------------------" << std::endl;
     std::cout << "3) Start to examine all the points and their neighbours, to calculate the first segmentation to surfaces and contours..." << std::endl;
+
 	iterateCells(vd, points);
 
 

@@ -1,48 +1,46 @@
 #ifndef OURPOINT_H
 #define OURPOINT_H
 
-#include <iostream>
-#include <cmath>
-
 enum preProcClass {
 	undef,
 	upperContour = 6, lowerContour = 4,
-	uniformSurface = 2, nonUniformSurface = 9
+	uniformSurface = 2, nonUniformSurface = 9,
+	roof = 12
 };
 
 class OurPoint {
 
 	//private datas
 	private:
-		double x;
-		double y;
-		double z;
+		long x;
+		long y;
+		long z;
 			int returns;
 		preProcClass preClass;
 
 	//public methods
 	public:
-	OurPoint (double x_, double y_, double z_, int returns_) : 
+	OurPoint (long x_, long y_, long z_, int returns_) : 
 		x(x_), y(y_), z(z_), preClass(undef), returns(returns_) {}
 
 	~OurPoint() {}
 
 	//getters
-	double getX() const { return x; }
-	double getY() const { return y; }
-	double getZ() const { return z; }
+	long getX() const { return x; }
+	long getY() const { return y; }
+	long getZ() const { return z; }
 		int getReturns() const { return returns; }
 	preProcClass getPreClass() const { return preClass; }
 
 	//setters
-	void setX(double x1) { x = x1; }
-	void setY(double y1) { y = y1; }
-	void setZ(double z1) { z = z1; }
+	void setX(long x1) { x = x1; }
+	void setY(long y1) { y = y1; }
+	void setZ(long z1) { z = z1; }
 		void setReturns(int ret) { returns = ret; }
 	void setPreClass(preProcClass p1) { preClass = p1; }
 
 	//other methods
-	double distanceFromInZ(const OurPoint& p2) const {
+	long distanceFromInZ(const OurPoint& p2) const {
 		return (p2.z - z);
 	}
 };
