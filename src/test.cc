@@ -189,6 +189,24 @@ void iterateCells(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inpu
 	ofs.close();*/
 }
 
+int translatePreProcClass_lasview(preProcClass ppc)
+{
+	switch (ppc)
+	{
+	case upperContour: return 6;
+	case lowerContour: return 4;
+	case uniformSurface: return 2;
+	case nonUniformSurface: return 9;
+	case roof: return 12;
+	default: return 0;
+	}
+}
+
+int translatePreProcClass_undefOnly(preProcClass ppc)
+{
+	return ppc == undef ? 9 : 12;
+}
+
 int main(int argc, char* argv[]) {
 	std::ifstream ifs;
 
@@ -243,8 +261,8 @@ int main(int argc, char* argv[]) {
 		output.SetRawY(point.getY());
 		output.SetRawZ(point.getZ());
 		liblas::Classification customClass;
-		customClass.SetClass(point.getPreClass());
-		// customClass.SetClass(point.getPreClass() == undef ? 9 : 12); // separating undef category only
+		customClass.SetClass(translatePreProcClass_lasview(point.getPreClass()));
+		// customClass.SetClass(translatePreProcClass_undefOnly(point.getPreClass())); // separating undef category only
 		output.SetClassification(customClass);
 		writer.WritePoint(output);
 	}
