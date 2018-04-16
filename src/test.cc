@@ -33,6 +33,7 @@ namespace polygon {
 long SCALE_Z; // current las file scale value
 long PRIMARY_TRESHOLD; // surface/contour threshold
 long SECONDARY_TRESHOLD;   // uniform/non-uniform surface threshold
+long ROOF_LOWER_LIMIT;
 
 preProcClass classCalculate_SSE(const OurPoint &p, const vector<OurPoint> &neighbours) {
 	preProcClass resultClass = undef;
@@ -114,6 +115,44 @@ vector<OurPoint> getNeighboursOfPoint(const voronoi_diagram<double>::cell_type &
 	return result;
 }
 
+void expandRoof(const voronoi_diagram<double>::cell_type &startCell, std::vector<OurPoint> &inputPoints, const long& limit) {
+	const OurPoint& startPoint = inputPoints[startCell.source_index()];
+	const voronoi_diagram<double>::edge_type *edge = startCell.incident_edge();
+	do
+	{
+		if (edge->is_primary())
+		{
+			const voronoi_diagram<double>::cell_type &nextCell = *edge->twin()->cell();
+			if (nextCell.contains_point() && !nextCell.is_degenerate())
+			{
+				OurPoint& nextPoint = inputPoints[nextCell.source_index()];
+				if (nextPoint.getPreClass() == uniformSurface && nextPoint.getZ() > limit)
+				{
+					nextPoint.setPreClass(roof);
+					expandRoof(nextCell, inputPoints, limit);
+				}
+			}
+		}
+		edge = edge->next();
+	} while (edge != startCell.incident_edge());
+}
+
+void determineRoof(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
+	for (auto it = vd.cells().begin(); it != vd.cells().end(); ++it)
+	{
+		const voronoi_diagram<double>::cell_type &startCell = *it;
+		if (startCell.contains_point() && !startCell.is_degenerate())
+		{
+			const OurPoint& startPoint = inputPoints[startCell.source_index()];
+			// long lowerLimit = startPoint.getZ(); // not useful enough
+			if (startPoint.getPreClass() == upperContour && startPoint.getZ() > ROOF_LOWER_LIMIT)
+			{
+				expandRoof(startCell, inputPoints, ROOF_LOWER_LIMIT);
+			}
+		}
+	}
+}
+
 void iterateCells(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
 	//std::ofstream ofs;
 	//ofs.open("file.txt", std::ofstream::out | std::ofstream::app);
@@ -166,6 +205,7 @@ int main(int argc, char* argv[]) {
 	SCALE_Z = (long)(1.0 / header.GetScaleZ());
 	PRIMARY_TRESHOLD = 2 * SCALE_Z;
 	SECONDARY_TRESHOLD = PRIMARY_TRESHOLD / 2;
+	ROOF_LOWER_LIMIT = (long)((header.GetMinZ() + (header.GetMaxZ() - header.GetMinZ()) / 4.0) * SCALE_Z);
 
 	std::vector<OurPoint> points;
 	points.reserve(header.GetPointRecordsCount());
@@ -190,9 +230,10 @@ int main(int argc, char* argv[]) {
     std::cout << "3) Start to examine all the points and their neighbours, to calculate the first segmentation to surfaces and contours..." << std::endl;
 
 	iterateCells(vd, points);
+	determineRoof(vd, points);
 
 
-	std::ofstream ofs("custom_classes.las", ios::out | ios::binary);
+	std::ofstream ofs("custom_classes_roof.las", ios::out | ios::binary);
 	liblas::Writer writer(ofs, header);
 
 	for (auto point : points)
@@ -210,4 +251,3 @@ int main(int argc, char* argv[]) {
 	
 	return 0;
 }
-
