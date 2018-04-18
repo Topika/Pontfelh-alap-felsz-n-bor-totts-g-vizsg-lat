@@ -140,7 +140,8 @@ bool checkNeighbourPoints(bool every, std::function<bool(const voronoi_diagram<d
 }
 
 void modifyNeighbourPoints(std::function<void(const voronoi_diagram<double>::cell_type&, OurPoint&)> fn,
-	const voronoi_diagram<double>::cell_type &cell, std::vector<OurPoint> &inputPoints)
+	const voronoi_diagram<double>::cell_type &cell, std::vector<OurPoint> &inputPoints,
+	std::function<bool(const OurPoint&)> condition = [](const OurPoint&) {return true;}, bool recursive = false)
 {
 	if (cell.contains_point() && !cell.is_degenerate())
 	{
@@ -152,8 +153,12 @@ void modifyNeighbourPoints(std::function<void(const voronoi_diagram<double>::cel
 				const voronoi_diagram<double>::cell_type &nextCell = *edge->twin()->cell();
 				if (nextCell.contains_point() && !nextCell.is_degenerate())
 				{
-					fn(nextCell, inputPoints[nextCell.source_index()]);
-					//modifyNeighbourPoints(fn, nextCell, inputPoints); // recursion crashed, maybe stack overflow?
+					OurPoint &nextPoint = inputPoints[nextCell.source_index()];
+					if (condition(nextPoint))
+					{
+						fn(nextCell, nextPoint);
+						if (recursive) modifyNeighbourPoints(fn, nextCell, inputPoints, condition, recursive);
+					}
 				}
 			}
 			edge = edge->next();
@@ -161,26 +166,15 @@ void modifyNeighbourPoints(std::function<void(const voronoi_diagram<double>::cel
 	}
 }
 
-// TODO extract expansion logic
 void expandRoof(const voronoi_diagram<double>::cell_type &startCell, std::vector<OurPoint> &inputPoints, const long &limit) {
-	const voronoi_diagram<double>::edge_type *edge = startCell.incident_edge();
-	do
-	{
-		if (edge->is_primary())
-		{
-			const voronoi_diagram<double>::cell_type &nextCell = *edge->twin()->cell();
-			if (nextCell.contains_point() && !nextCell.is_degenerate())
-			{
-				OurPoint &nextPoint = inputPoints[nextCell.source_index()];
-				if (nextPoint.getPreClass() == uniformSurface && nextPoint.getZ() > limit)
-				{
-					nextPoint.setPreClass(roof);
-					expandRoof(nextCell, inputPoints, limit);
-				}
-			}
-		}
-		edge = edge->next();
-	} while (edge != startCell.incident_edge());
+	auto condition = [&limit](const OurPoint& point)->bool {
+		return (point.getPreClass() == uniformSurface && point.getZ() > limit);
+	};
+	auto expandRoofLogic = [](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
+		point.setPreClass(roof);
+	};
+
+	modifyNeighbourPoints(expandRoofLogic, startCell, inputPoints, condition, true);
 }
 
 void voronoiCellIteration(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints,
