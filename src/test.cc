@@ -268,13 +268,13 @@ void voronoiClosingErosion(const voronoi_diagram<double> &vd, std::vector<OurPoi
 	voronoiCellIteration(vd, inputPoints, condition, task);
 }
 
-void voronoiOpeningDilatation(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
+void voronoiOpeningDilation(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
 	auto condition = [](const OurPoint &point)->bool {
 		return point.isInnerBuilding;
 	};
 
 	auto task = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
-		auto openingDilatationLogic = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
+		auto openingDilationLogic = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
 			auto kernelLogic = [](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
 				point.isBuilding = true;
 			};
@@ -283,19 +283,19 @@ void voronoiOpeningDilatation(const voronoi_diagram<double> &vd, std::vector<Our
 		};
 
 		point.isBuilding = true;
-		modifyNeighbourPoints(openingDilatationLogic, cell, inputPoints);
+		modifyNeighbourPoints(openingDilationLogic, cell, inputPoints);
 	};
 
 	voronoiCellIteration(vd, inputPoints, condition, task);
 }
 
-void voronoiClosingDilatation(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
+void voronoiClosingDilation(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
 	auto condition = [](const OurPoint &point)->bool {
 		return point.isBuilding;
 	};
 
 	auto task = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
-		auto closingDilatationLogic = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
+		auto closingDilationLogic = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
 			auto kernelLogic = [](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
 				point.isOuterBuilding = true;
 			};
@@ -304,7 +304,7 @@ void voronoiClosingDilatation(const voronoi_diagram<double> &vd, std::vector<Our
 		};
 
 		point.isOuterBuilding = true;
-		modifyNeighbourPoints(closingDilatationLogic, cell, inputPoints);
+		modifyNeighbourPoints(closingDilationLogic, cell, inputPoints);
 	};
 
 	voronoiCellIteration(vd, inputPoints, condition, task);
@@ -412,9 +412,9 @@ int main(int argc, char* argv[]) {
 
 	// opening
 	voronoiOpeningErosion(vd, points);
-	voronoiOpeningDilatation(vd, points);
+	voronoiOpeningDilation(vd, points);
 	// closing
-	voronoiClosingDilatation(vd, points);
+	voronoiClosingDilation(vd, points);
 	voronoiClosingErosion(vd, points);
 
 
