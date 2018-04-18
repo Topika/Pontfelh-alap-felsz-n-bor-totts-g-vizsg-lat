@@ -3,13 +3,13 @@
 
 enum preProcClass {
 	undef,
-	upperContour = 6, lowerContour = 4,
-	uniformSurface = 2, nonUniformSurface = 9,
-	roof = 12
+	upperContour, lowerContour,
+	uniformSurface, nonUniformSurface
+
+	, roof // temporarily added
 };
 
 class OurPoint {
-
 	//private datas
 	private:
 		long x;
@@ -43,6 +43,11 @@ class OurPoint {
 	long distanceFromInZ(const OurPoint& p2) const {
 		return (p2.z - z);
 	}
+
+	bool isRoofContour = false;
+	bool isInnerBuilding = false;
+	bool isOuterBuilding = false;
+	bool isBuilding = false;
 };
 
 #endif //OURPOINT_H
