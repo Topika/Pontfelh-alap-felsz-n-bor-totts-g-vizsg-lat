@@ -1,6 +1,7 @@
 #include <liblas/liblas.hpp>
 #include <fstream>  // std::ifstream
 #include <iostream> // std::cout
+#include <functional>
 #include "boost/polygon/voronoi.hpp"
 #include "headers/OurPoint.h"
 
@@ -70,7 +71,7 @@ preProcClass classCalculate_SSE(const OurPoint &p, const vector<OurPoint> &neigh
 */
 preProcClass classCalculate(const OurPoint &p, const vector<OurPoint> &neighbours) {
 	preProcClass resultClass = undef;
-    
+
 	bool isInAndClose = false, isInAndFar = false, isUpper = false, isLower = false;
 	for (auto nPoint : neighbours)
 	{
@@ -115,7 +116,10 @@ vector<OurPoint> getNeighboursOfPoint(const voronoi_diagram<double>::cell_type &
 	return result;
 }
 
-bool hasNeighbourPointWithClass(const voronoi_diagram<double>::cell_type &cell, preProcClass type, const std::vector<OurPoint> &inputPoints) {
+bool checkNeighbourPoints(bool every, std::function<bool(const OurPoint &point)> condition,
+	const voronoi_diagram<double>::cell_type &cell, const std::vector<OurPoint> &inputPoints)
+{
+	bool default = every ? true : false;
 	if (cell.contains_point() && !cell.is_degenerate())
 	{
 		const voronoi_diagram<double>::edge_type *edge = cell.incident_edge();
@@ -124,34 +128,17 @@ bool hasNeighbourPointWithClass(const voronoi_diagram<double>::cell_type &cell, 
 			if (edge->is_primary())
 			{
 				auto index = edge->twin()->cell()->source_index();
-				if (inputPoints[index].getPreClass() == type) return true;
+				if (condition(inputPoints[index])) return !default;
 			}
 			edge = edge->next();
 		} while (edge != cell.incident_edge());
 	}
-	return false;
+	return default;
 }
 
-bool allNeighbourPointsWithClass(const voronoi_diagram<double>::cell_type &cell, preProcClass type, const std::vector<OurPoint> &inputPoints) {
-	if (cell.contains_point() && !cell.is_degenerate())
-	{
-		const voronoi_diagram<double>::edge_type *edge = cell.incident_edge();
-		do
-		{
-			if (edge->is_primary())
-			{
-				auto index = edge->twin()->cell()->source_index();
-				if (type == undef && !inputPoints[index].isOuterBuilding) return false;
-				else if (inputPoints[index].getPreClass() != type) return false;
-			}
-			edge = edge->next();
-		} while (edge != cell.incident_edge());
-	}
-	return true;
-}
-
-// TODO extract expansion logic
-void expandRoof(const voronoi_diagram<double>::cell_type &startCell, std::vector<OurPoint> &inputPoints, const long& limit) {
+void modifyNeighbourPoints(std::function<void(OurPoint &point)> fn,
+	const voronoi_diagram<double>::cell_type &startCell, std::vector<OurPoint> &inputPoints)
+{
 	const voronoi_diagram<double>::edge_type *edge = startCell.incident_edge();
 	do
 	{
@@ -160,7 +147,26 @@ void expandRoof(const voronoi_diagram<double>::cell_type &startCell, std::vector
 			const voronoi_diagram<double>::cell_type &nextCell = *edge->twin()->cell();
 			if (nextCell.contains_point() && !nextCell.is_degenerate())
 			{
-				OurPoint& nextPoint = inputPoints[nextCell.source_index()];
+				OurPoint &nextPoint = inputPoints[nextCell.source_index()];
+				fn(nextPoint);
+				//modifyNeighbourPoints(fn, nextCell, inputPoints); // recursion crashed, maybe stack overflow?
+			}
+		}
+		edge = edge->next();
+	} while (edge != startCell.incident_edge());
+}
+
+// TODO extract expansion logic
+void expandRoof(const voronoi_diagram<double>::cell_type &startCell, std::vector<OurPoint> &inputPoints, const long &limit) {
+	const voronoi_diagram<double>::edge_type *edge = startCell.incident_edge();
+	do
+	{
+		if (edge->is_primary())
+		{
+			const voronoi_diagram<double>::cell_type &nextCell = *edge->twin()->cell();
+			if (nextCell.contains_point() && !nextCell.is_degenerate())
+			{
+				OurPoint &nextPoint = inputPoints[nextCell.source_index()];
 				if (nextPoint.getPreClass() == uniformSurface && nextPoint.getZ() > limit)
 				{
 					nextPoint.setPreClass(roof);
@@ -172,87 +178,73 @@ void expandRoof(const voronoi_diagram<double>::cell_type &startCell, std::vector
 	} while (edge != startCell.incident_edge());
 }
 
-void markNeighbourPointsHavingClass(const voronoi_diagram<double>::cell_type &startCell, std::vector<OurPoint> &inputPoints,
-		preProcClass type = undef, const long& limit = 0) {
-	const voronoi_diagram<double>::edge_type *edge = startCell.incident_edge();
-	do
-	{
-		if (edge->is_primary())
-		{
-			const voronoi_diagram<double>::cell_type &nextCell = *edge->twin()->cell();
-			if (nextCell.contains_point() && !nextCell.is_degenerate())
-			{
-				OurPoint& nextPoint = inputPoints[nextCell.source_index()];
-				if (type == roof)
-				{
-					nextPoint.isBuilding = true;
-					continue;
-				}
-				if (type == undef)
-				{
-					nextPoint.isOuterBuilding = true;
-					continue;
-				}
-
-				if (nextPoint.getPreClass() == type && nextPoint.getZ() > limit)
-				{
-					nextPoint.isRoofContour = true;
-					nextPoint.setPreClass(roof);
-					//markNeighbourPointsHavingClass(nextCell, type, inputPoints, limit); // recursion crashed, maybe stack overflow?
-				}
-			}
-		}
-		edge = edge->next();
-	} while (edge != startCell.incident_edge());
-}
-
 // TODO extract iteration logic
 void determineRoof(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
+	auto roofNeighbourLogic = [](const OurPoint &point)->bool {
+		return (point.getPreClass() == roof);
+	};
 	for (auto it = vd.cells().begin(); it != vd.cells().end(); ++it)
 	{
 		const voronoi_diagram<double>::cell_type &startCell = *it;
 		if (startCell.contains_point() && !startCell.is_degenerate())
 		{
-			OurPoint& startPoint = inputPoints[startCell.source_index()];
+			OurPoint &startPoint = inputPoints[startCell.source_index()];
 			// long lowerLimit = startPoint.getZ(); // not useful enough
 			if (startPoint.getPreClass() == upperContour && startPoint.getZ() > ROOF_LOWER_LIMIT)
 			{
 				expandRoof(startCell, inputPoints, ROOF_LOWER_LIMIT);
-				if (hasNeighbourPointWithClass(startCell, roof, inputPoints)) startPoint.isRoofContour = true;
+				if (checkNeighbourPoints(false, roofNeighbourLogic, startCell, inputPoints))
+					startPoint.isRoofContour = true;
 			}
 		}
 	}
 }
 
 void mergeRoofContour(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
+	auto roofContourLogic = [](OurPoint &point) {
+		if (point.getPreClass() == upperContour)
+		{
+			point.isRoofContour = true;
+			point.setPreClass(roof);
+		}
+	};
 	for (auto it = vd.cells().begin(); it != vd.cells().end(); ++it)
 	{
 		const voronoi_diagram<double>::cell_type &startCell = *it;
 		if (startCell.contains_point() && !startCell.is_degenerate())
 		{
-			OurPoint& startPoint = inputPoints[startCell.source_index()];
-			if (startPoint.isRoofContour == true && startPoint.getZ() > ROOF_LOWER_LIMIT)
+			OurPoint &startPoint = inputPoints[startCell.source_index()];
+			if (startPoint.isRoofContour == true)
 			{
-				markNeighbourPointsHavingClass(startCell, inputPoints, upperContour, ROOF_LOWER_LIMIT);
+				startPoint.setPreClass(roof);
+				modifyNeighbourPoints(roofContourLogic, startCell, inputPoints);
 			}
 		}
 	}
 }
 
 void determineInnerBuilding(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints, bool opening) {
+	auto openingLogic = [](const OurPoint &point)->bool {
+		return (point.getPreClass() != roof);
+	};
+	auto closingLogic = [](const OurPoint &point)->bool {
+		return (!point.isOuterBuilding);
+	};
 	for (auto it = vd.cells().begin(); it != vd.cells().end(); ++it)
 	{
 		const voronoi_diagram<double>::cell_type &startCell = *it;
 		if (startCell.contains_point() && !startCell.is_degenerate())
 		{
-			OurPoint& startPoint = inputPoints[startCell.source_index()];
+			OurPoint &startPoint = inputPoints[startCell.source_index()];
 			if (opening && startPoint.getPreClass() == roof)
 			{
-				if (allNeighbourPointsWithClass(startCell, roof, inputPoints)) startPoint.isInnerBuilding = true;
+				if (checkNeighbourPoints(true, openingLogic, startCell, inputPoints))
+					startPoint.isInnerBuilding = true;
 			}
 			else if (!opening && startPoint.isOuterBuilding)
 			{
-				if (allNeighbourPointsWithClass(startCell, undef, inputPoints)) startPoint.isBuilding = true;
+				if (checkNeighbourPoints(true, closingLogic, startCell, inputPoints))
+					startPoint.isBuilding = true;
 			}
 		}
 	}
@@ -264,16 +256,16 @@ void expandInnerBuilding(const voronoi_diagram<double> &vd, std::vector<OurPoint
 		const voronoi_diagram<double>::cell_type &startCell = *it;
 		if (startCell.contains_point() && !startCell.is_degenerate())
 		{
-			OurPoint& startPoint = inputPoints[startCell.source_index()];
+			OurPoint &startPoint = inputPoints[startCell.source_index()];
 			if (opening && startPoint.isInnerBuilding)
 			{
 				startPoint.isBuilding = true;
-				markNeighbourPointsHavingClass(startCell, inputPoints, roof);
+				//markNeighbourPointsHavingClass(startCell, inputPoints, roof);
 			}
 			else if (!opening && startPoint.isBuilding)
 			{
 				startPoint.isOuterBuilding = true;
-				markNeighbourPointsHavingClass(startCell, inputPoints, undef);
+				//markNeighbourPointsHavingClass(startCell, inputPoints, undef);
 			}
 		}
 	}
@@ -379,12 +371,12 @@ int main(int argc, char* argv[]) {
 	for (int i = 0; i < 5; ++i)
 		mergeRoofContour(vd, points); // recursion crashed, maybe stack overflow?
 
-	// opening
-	determineInnerBuilding(vd, points, true);
-	expandInnerBuilding(vd, points, true);
-	// closing
-	expandInnerBuilding(vd, points, false);
-	determineInnerBuilding(vd, points, false);
+	//// opening
+	//determineInnerBuilding(vd, points, true);
+	//expandInnerBuilding(vd, points, true);
+	//// closing
+	//expandInnerBuilding(vd, points, false);
+	//determineInnerBuilding(vd, points, false);
 
 
 	std::ofstream ofs("custom_classes_roof.las", ios::out | ios::binary);
@@ -398,10 +390,11 @@ int main(int argc, char* argv[]) {
 		output.SetRawZ(point.getZ());
 		liblas::Classification customClass;
 		// customClass.SetClass(translatePreProcClass_lasview(point.getPreClass(), point.isRoofContour));
-		customClass.SetClass(translatePreProcClass_binary(point.isBuilding)); // separating undef category only
+		customClass.SetClass(translatePreProcClass_binary(point.getPreClass() == roof));
+		//customClass.SetClass(translatePreProcClass_binary(point.isRoofContour));
 		output.SetClassification(customClass);
 		writer.WritePoint(output);
 	}
-	
+
 	return 0;
 }
