@@ -32,17 +32,20 @@ namespace polygon {
 }  // polygon
 }  // boost
 
-long SCALE_Z; // current las file scale value
+long SCALE_X, SCALE_Y, SCALE_Z; // current las file scale values
 long PRIMARY_TRESHOLD; // surface/contour threshold
 long SECONDARY_TRESHOLD;   // uniform/non-uniform surface threshold
 long ROOF_LOWER_LIMIT;
+unsigned short MIN_INTENSITY, MAX_INTENSITY, INTENSITY_INTERVAL;
+const float ROAD_MIN = 0.15f;
+const float ROAD_MAX = 0.24f;
 
 preProcClass classCalculate_SSE(const OurPoint &p, const vector<OurPoint> &neighbours) {
 	preProcClass resultClass = undef;
 
 	bool isUpper = false, isLower = false;
 	double SSE = 0.0;
-	const double limit = 1000.0; // ~SECONDARY_TRESHOLD
+	const double limit = SECONDARY_TRESHOLD;
 	for (auto nPoint : neighbours)
 	{
 		long distance = nPoint.distanceFromInZ(p);
@@ -311,6 +314,76 @@ void voronoiClosingDilation(const voronoi_diagram<double> &vd, std::vector<OurPo
 	voronoiCellIteration(vd, inputPoints, condition, task);
 }
 
+void buildingDilation(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
+	auto condition = [](const OurPoint &point)->bool {
+		return point.isBuilding;
+	};
+
+	auto task = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
+		auto dilationLogic = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
+			auto kernelLogic = [](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
+				if (point.getPreClass() == upperContour || point.getPreClass() == lowerContour)
+					point.setPreClass(building);
+			};
+			if (point.getPreClass() == upperContour || point.getPreClass() == lowerContour)
+			{
+				point.setPreClass(building);
+				modifyNeighbourPoints(kernelLogic, cell, inputPoints);
+			}
+		};
+
+		point.setPreClass(building);
+		modifyNeighbourPoints(dilationLogic, cell, inputPoints);
+	};
+
+	voronoiCellIteration(vd, inputPoints, condition, task);
+}
+
+long closestBuildingDistance(const OurPoint &otherPoint, long limitX, long limitY, const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
+	auto condition = [](const OurPoint &point)->bool {
+		return point.getPreClass() == building;
+	};
+
+	long minDist = limitX * limitY + 1;
+	auto task = [&otherPoint, &minDist, limitX, limitY](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
+		long xDiff = point.getX() - otherPoint.getX();
+		long yDiff = point.getY() - otherPoint.getY();
+		if (xDiff > limitX || yDiff > limitY) return;
+		long long currDist = xDiff * xDiff + yDiff * yDiff;
+
+		if (currDist > 0 && currDist < minDist) minDist = currDist;
+	};
+
+	voronoiCellIteration(vd, inputPoints, condition, task);
+	return minDist;
+}
+
+float roadLowerLimit() {
+	return MIN_INTENSITY + INTENSITY_INTERVAL * ROAD_MIN;
+}
+float roadUpperLimit() {
+	return MIN_INTENSITY + INTENSITY_INTERVAL * ROAD_MAX;
+}
+
+void determineRoad(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
+	auto condition = [](const OurPoint &point)->bool {
+		return (point.getPreClass() == uniformSurface && point.getZ() < ROOF_LOWER_LIMIT &&
+				point.getIntensity() > roadLowerLimit() && point.getIntensity() < roadUpperLimit());
+	};
+
+	auto task = [&vd, &inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
+		long limitX = 3 * SCALE_X;
+		long limitY = 3 * SCALE_Y;
+		long dist = closestBuildingDistance(point, limitX, limitY, vd, inputPoints);
+		if (dist < (limitX * limitY))
+		{
+			point.setPreClass(undef);
+		}
+	};
+
+	voronoiCellIteration(vd, inputPoints, condition, task);
+}
+
 void iterateCells(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
 	//std::ofstream ofs;
 	//ofs.open("file.txt", std::ofstream::out | std::ofstream::app);
@@ -347,16 +420,16 @@ void iterateCells(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inpu
 	ofs.close();*/
 }
 
-int translatePreProcClass_lasview(preProcClass ppc, bool isRoofContour = false)
+int translatePreProcClass_lasview(preProcClass ppc)
 {
-	if (isRoofContour) return 5;
 	switch (ppc)
 	{
-	case upperContour: return 6;
-	case lowerContour: return 3;
 	case uniformSurface: return 2;
-	case nonUniformSurface: return 9;
-	case roof: return 12;
+	case nonUniformSurface:// return 9;
+	case upperContour:// return 6;
+	case lowerContour: return 3;
+	case building: return 12;
+	case roof: return 8;
 	default: return 0;
 	}
 }
@@ -377,8 +450,9 @@ int main(int argc, char* argv[]) {
 	std::cout << "Compressed: " << header.Compressed() << '\n';
 	//std::cout << "Signature: " << header.GetFileSignature() << '\n';
 	std::cout << "Points count: " << header.GetPointRecordsCount() << '\n';
-    std::cout << std::endl << "--------------------------------------------------------" << std::endl;
 
+	SCALE_X = (long)(1.0 / header.GetScaleX());
+	SCALE_Y = (long)(1.0 / header.GetScaleY());
 	SCALE_Z = (long)(1.0 / header.GetScaleZ());
 	PRIMARY_TRESHOLD = 2 * SCALE_Z;
 	SECONDARY_TRESHOLD = PRIMARY_TRESHOLD / 2;
@@ -389,15 +463,23 @@ int main(int argc, char* argv[]) {
 	//~ The voronoi diagram
 	voronoi_diagram<double> vd;
 
+	bool firstPoint = true;
 	while (reader.ReadNextPoint())
 	{
 		liblas::Point const& p = reader.GetPoint();
 		//~ points.push_back(point_data<double>(p.GetX(),p.GetY()));
-		points.push_back(OurPoint(p.GetRawX(),p.GetRawY(),p.GetRawZ(),p.GetReturnNumber()));
+		const unsigned short intensity = p.GetIntensity();
+		points.push_back(OurPoint(p.GetRawX(),p.GetRawY(),p.GetRawZ(),p.GetReturnNumber(),intensity));
+		if (firstPoint) { MIN_INTENSITY = intensity; MAX_INTENSITY = intensity; firstPoint = false; }
+		if (intensity < MIN_INTENSITY) MIN_INTENSITY = intensity;
+		if (intensity > MAX_INTENSITY && intensity < 20000) MAX_INTENSITY = intensity; // there is a seemingly invalid value: 28003
 		//~ boost::polygon::insert<OurPoint,voronoi_diagram<double> >(p, &vd);
 
 		//~ std::cout << p.GetX() << ", " << p.GetY() << ", " << p.GetZ() << "\n";
 	}
+	INTENSITY_INTERVAL = MAX_INTENSITY - MIN_INTENSITY;
+	cout << "Intensity interval: " << MIN_INTENSITY << '\t' << MAX_INTENSITY << endl;
+    std::cout << std::endl << "--------------------------------------------------------" << std::endl;
 	construct_voronoi(points.begin(), points.end(), &vd);
 
 	std::cout << std::endl << "2) Finished the calculation of voronoi diagram. The result is:" << std::endl; 
@@ -417,6 +499,11 @@ int main(int argc, char* argv[]) {
 	// closing
 	voronoiClosingDilation(vd, points);
 	voronoiClosingErosion(vd, points);
+	buildingDilation(vd, points);
+
+	// TODO
+	// O(n^2) not that good
+	determineRoad(vd, points);
 
 
 	std::ofstream ofs("custom_classes_roof.las", ios::out | ios::binary);
@@ -429,9 +516,9 @@ int main(int argc, char* argv[]) {
 		output.SetRawY(point.getY());
 		output.SetRawZ(point.getZ());
 		liblas::Classification customClass;
-		// customClass.SetClass(translatePreProcClass_lasview(point.getPreClass(), point.isRoofContour));
-		//customClass.SetClass(translatePreProcClass_binary(point.getPreClass() == roof));
-		customClass.SetClass(translatePreProcClass_binary(point.isBuilding));
+		customClass.SetClass(translatePreProcClass_lasview(point.getPreClass()));
+		//customClass.SetClass(translatePreProcClass_binary(point.getPreClass() == building));
+		//customClass.SetClass(translatePreProcClass_binary(point.isBuilding);
 		output.SetClassification(customClass);
 		writer.WritePoint(output);
 	}

@@ -5,7 +5,8 @@ enum preProcClass {
 	undef=-1,
 	upperContour = 0, lowerContour = 1,
 	uniformSurface = 2, nonUniformSurface = 3
-, roof //temporarrily added
+
+	, roof, building // temporarily added
 };
 
 class OurPoint {
@@ -15,12 +16,13 @@ class OurPoint {
 		long y;
 		long z;
 		int returns;
+		unsigned short intensity;
 		preProcClass preClass;
 
 	//public methods
 	public:
-	OurPoint (long x_, long y_, long z_, int returns_) : 
-		x(x_), y(y_), z(z_), preClass(undef), returns(returns_) {}
+	OurPoint (long x_, long y_, long z_, int returns_, unsigned short intensity_) :
+		x(x_), y(y_), z(z_), preClass(undef), returns(returns_), intensity(intensity_) {}
 
 	~OurPoint() {}
 
@@ -28,7 +30,8 @@ class OurPoint {
 	long getX() const { return x; }
 	long getY() const { return y; }
 	long getZ() const { return z; }
-		int getReturns() const { return returns; }
+	int getReturns() const { return returns; }
+	unsigned short getIntensity() const { return intensity; }
 	preProcClass getPreClass() const { return preClass; }
 
 	//setters
@@ -36,6 +39,7 @@ class OurPoint {
 	void setY(long y1) { y = y1; }
 	void setZ(long z1) { z = z1; }
 	void setReturns(int ret) { returns = ret; }
+	void getIntensity(unsigned short intensity_) { intensity = intensity_; }
 	void setPreClass(preProcClass p1) { preClass = p1; }
 
 	//other methods
