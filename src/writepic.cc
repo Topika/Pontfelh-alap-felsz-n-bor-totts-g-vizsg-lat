@@ -40,7 +40,6 @@ void ImageWriter::addPoint(const OurPoint& newPoint) {
 }
 
 void ImageWriter::writeToFile(const std::string& fileName) {
-    cout << "TT" << std::endl;
     Mat mat(maxX,maxY,CV_8UC3);
     for(int i = 0; i < maxX; ++i) {
         for(int j = 0; j < maxY; ++j) {

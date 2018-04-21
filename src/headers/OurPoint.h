@@ -1,9 +1,6 @@
 #ifndef OURPOINT_H
 #define OURPOINT_H
 
-#include <iostream>
-#include <cmath>
-
 enum preProcClass {
 	undef=-1,
 	upperContour = 0, lowerContour = 1,

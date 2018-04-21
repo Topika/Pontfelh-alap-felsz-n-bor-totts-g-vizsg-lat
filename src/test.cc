@@ -368,8 +368,6 @@ int translatePreProcClass_binary(bool condition)
 
 int main(int argc, char* argv[]) {
 	std::ifstream ifs;
-    std::ofstream of("o.txt");
-    of.close();
 
 	ifs.open("../data/sample1.las", std::ios::in | std::ios::binary);
 	liblas::ReaderFactory f;
