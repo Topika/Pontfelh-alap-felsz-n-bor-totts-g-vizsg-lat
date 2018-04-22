@@ -178,7 +178,7 @@ void expandRoof(const voronoi_diagram<double>::cell_type &startCell, std::vector
 		point.setPreClass(roof);
 	};
 
-	modifyNeighbourPoints(expandRoofLogic, startCell, inputPoints, condition, true);
+	modifyNeighbourPoints(expandRoofLogic, startCell, inputPoints, condition/*, true*/);
 }
 
 void voronoiCellIteration(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints,
@@ -197,7 +197,7 @@ void voronoiCellIteration(const voronoi_diagram<double> &vd, std::vector<OurPoin
 
 void determineRoof(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
 	auto condition = [](const OurPoint &point)->bool {
-		return (point.getPreClass() == upperContour && point.getZ() > ROOF_LOWER_LIMIT);
+		return ((point.getPreClass() == upperContour || point.getPreClass() == roof) && point.getZ() > ROOF_LOWER_LIMIT);
 	};
 	auto task = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
 		auto roofNeighbourLogic = [](const voronoi_diagram<double>::cell_type &cell, const OurPoint &point)->bool {
@@ -205,7 +205,7 @@ void determineRoof(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inp
 		};
 
 		expandRoof(cell, inputPoints, ROOF_LOWER_LIMIT);
-		if (checkNeighbourPoints(false, roofNeighbourLogic, cell, inputPoints))
+		if (point.getPreClass() == upperContour && checkNeighbourPoints(false, roofNeighbourLogic, cell, inputPoints))
 			point.isRoofContour = true;
 	};
 
@@ -252,12 +252,12 @@ void voronoiOpeningErosion(const voronoi_diagram<double> &vd, std::vector<OurPoi
 	voronoiCellIteration(vd, inputPoints, condition, task);
 }
 
-void voronoiClosingErosion(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
+void voronoiClosingErosion(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints, std::list<OurPoint*> &buildingPoints) {
 	auto condition = [](const OurPoint &point)->bool {
 		return point.isOuterBuilding;
 	};
 
-	auto task = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
+	auto task = [&inputPoints, &buildingPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
 		auto closingErosionLogic = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, const OurPoint &point)->bool {
 			auto kernelLogic = [](const voronoi_diagram<double>::cell_type &cell, const OurPoint &point)->bool {
 				return (!point.isOuterBuilding);
@@ -266,7 +266,10 @@ void voronoiClosingErosion(const voronoi_diagram<double> &vd, std::vector<OurPoi
 		};
 
 		if (checkNeighbourPoints(true, closingErosionLogic, cell, inputPoints))
+		{
+			if (!point.isBuilding) buildingPoints.push_front(&point);
 			point.isBuilding = true;
+		}
 	};
 
 	voronoiCellIteration(vd, inputPoints, condition, task);
@@ -314,20 +317,24 @@ void voronoiClosingDilation(const voronoi_diagram<double> &vd, std::vector<OurPo
 	voronoiCellIteration(vd, inputPoints, condition, task);
 }
 
-void buildingDilation(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
+void buildingDilation(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints, std::list<OurPoint*> &buildingPoints) {
 	auto condition = [](const OurPoint &point)->bool {
 		return point.isBuilding;
 	};
 
-	auto task = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
-		auto dilationLogic = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
-			auto kernelLogic = [](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
+	auto task = [&inputPoints, &buildingPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
+		auto dilationLogic = [&inputPoints, &buildingPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
+			auto kernelLogic = [&buildingPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
 				if (point.getPreClass() == upperContour || point.getPreClass() == lowerContour)
+				{
 					point.setPreClass(building);
+					buildingPoints.push_front(&point);
+				}
 			};
 			if (point.getPreClass() == upperContour || point.getPreClass() == lowerContour)
 			{
 				point.setPreClass(building);
+				buildingPoints.push_front(&point);
 				modifyNeighbourPoints(kernelLogic, cell, inputPoints);
 			}
 		};
@@ -339,22 +346,20 @@ void buildingDilation(const voronoi_diagram<double> &vd, std::vector<OurPoint> &
 	voronoiCellIteration(vd, inputPoints, condition, task);
 }
 
-long closestBuildingDistance(const OurPoint &otherPoint, long limitX, long limitY, const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
-	auto condition = [](const OurPoint &point)->bool {
-		return point.getPreClass() == building;
-	};
-
+long closestBuildingDistance(const OurPoint &otherPoint, long limitX, long limitY, const std::list<OurPoint*> &buildingPoints) {
 	long minDist = limitX * limitY + 1;
-	auto task = [&otherPoint, &minDist, limitX, limitY](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
-		long xDiff = point.getX() - otherPoint.getX();
-		long yDiff = point.getY() - otherPoint.getY();
-		if (xDiff > limitX || yDiff > limitY) return;
+
+	for (auto it = buildingPoints.begin(); it != buildingPoints.end(); ++it)
+	{
+		OurPoint *point = *it;
+		long xDiff = point->getX() - otherPoint.getX();
+		long yDiff = point->getY() - otherPoint.getY();
+		if (xDiff > limitX || yDiff > limitY) continue;
 		long long currDist = xDiff * xDiff + yDiff * yDiff;
 
 		if (currDist > 0 && currDist < minDist) minDist = currDist;
-	};
+	}
 
-	voronoiCellIteration(vd, inputPoints, condition, task);
 	return minDist;
 }
 
@@ -365,20 +370,40 @@ float roadUpperLimit() {
 	return MIN_INTENSITY + INTENSITY_INTERVAL * ROAD_MAX;
 }
 
-void determineRoad(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
+void finalizeClassification(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints, const std::list<OurPoint*> &buildingPoints) {
 	auto condition = [](const OurPoint &point)->bool {
-		return (point.getPreClass() == uniformSurface && point.getZ() < ROOF_LOWER_LIMIT &&
-				point.getIntensity() > roadLowerLimit() && point.getIntensity() < roadUpperLimit());
+		return true;
 	};
 
-	auto task = [&vd, &inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
-		long limitX = 3 * SCALE_X;
-		long limitY = 3 * SCALE_Y;
-		long dist = closestBuildingDistance(point, limitX, limitY, vd, inputPoints);
-		if (dist < (limitX * limitY))
+	auto task = [&vd, &inputPoints, &buildingPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
+		const long limitX_Road = 3 * SCALE_X;
+		const long limitY_Road = 3 * SCALE_Y;
+		const long limitX_DenoisingSurface = SCALE_X;
+		const long limitY_DenoisingSurface = SCALE_Y;
+		const long limitX_DenoisingContour = SCALE_X / 4;
+		const long limitY_DenoisingContour = SCALE_Y / 4;
+		long dist;
+
+		if (point.getPreClass() == uniformSurface && point.getZ() < ROOF_LOWER_LIMIT &&
+			point.getIntensity() > roadLowerLimit() && point.getIntensity() < roadUpperLimit())
 		{
-			point.setPreClass(undef);
+			dist = closestBuildingDistance(point, limitX_Road, limitY_Road, buildingPoints);
+			if (dist < (limitX_Road * limitY_Road))
+				point.setPreClass(undef);
 		}
+		else if (point.getPreClass() == upperContour || point.getPreClass() == lowerContour)
+		{
+			dist = closestBuildingDistance(point, limitX_DenoisingContour, limitY_DenoisingContour, buildingPoints);
+			if (dist < (limitX_DenoisingContour * limitY_DenoisingContour))
+				point.setPreClass(building);
+		}
+		else if (point.getZ() > ROOF_LOWER_LIMIT && (point.getPreClass() == roof || point.getPreClass() == nonUniformSurface))
+		{
+			dist = closestBuildingDistance(point, limitX_DenoisingSurface, limitY_DenoisingSurface, buildingPoints);
+			if (dist < (limitX_DenoisingSurface * limitY_DenoisingSurface))
+				point.setPreClass(building);
+		}
+
 	};
 
 	voronoiCellIteration(vd, inputPoints, condition, task);
@@ -467,6 +492,7 @@ int main(int argc, char* argv[]) {
 	while (reader.ReadNextPoint())
 	{
 		liblas::Point const& p = reader.GetPoint();
+		//if (p.GetReturnNumber() != 1) continue;
 		//~ points.push_back(point_data<double>(p.GetX(),p.GetY()));
 		const unsigned short intensity = p.GetIntensity();
 		points.push_back(OurPoint(p.GetRawX(),p.GetRawY(),p.GetRawZ(),p.GetReturnNumber(),intensity));
@@ -477,8 +503,8 @@ int main(int argc, char* argv[]) {
 
 		//~ std::cout << p.GetX() << ", " << p.GetY() << ", " << p.GetZ() << "\n";
 	}
-	INTENSITY_INTERVAL = MAX_INTENSITY - MIN_INTENSITY;
-	cout << "Intensity interval: " << MIN_INTENSITY << '\t' << MAX_INTENSITY << endl;
+	INTENSITY_INTERVAL = 1050;//MAX_INTENSITY - MIN_INTENSITY;
+	std::cout << "Intensity interval: " << MIN_INTENSITY << '\t' << MAX_INTENSITY << std::endl;
     std::cout << std::endl << "--------------------------------------------------------" << std::endl;
 	construct_voronoi(points.begin(), points.end(), &vd);
 
@@ -489,21 +515,29 @@ int main(int argc, char* argv[]) {
     std::cout << "3) Start to examine all the points and their neighbours, to calculate the first segmentation to surfaces and contours..." << std::endl;
 
 	iterateCells(vd, points);
-	determineRoof(vd, points);
+
+	for (int i = 0; i < 100; ++i) determineRoof(vd, points);
 	for (int i = 0; i < 5; ++i)
 		mergeRoofContour(vd, points); // recursion crashed, maybe stack overflow?
 
 	// opening
+	std::cout << "Opening..." << std::endl;
 	voronoiOpeningErosion(vd, points);
 	voronoiOpeningDilation(vd, points);
 	// closing
+	std::cout << "Closing..." << std::endl;
+	std::list<OurPoint*> buildingPoints;
 	voronoiClosingDilation(vd, points);
-	voronoiClosingErosion(vd, points);
-	buildingDilation(vd, points);
+	voronoiClosingErosion(vd, points, buildingPoints);
+	std::cout << "Building..." << std::endl;
+
+	buildingDilation(vd, points, buildingPoints);
+	cout << buildingPoints.size() << endl;
 
 	// TODO
-	// O(n^2) not that good
-	determineRoad(vd, points);
+	// O(n^2) is not that good, using buildingPoints instead
+	std::cout << "Road..." << std::endl;
+	finalizeClassification(vd, points, buildingPoints);
 
 
 	std::ofstream ofs("custom_classes_roof.las", ios::out | ios::binary);
