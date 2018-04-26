@@ -6,7 +6,7 @@ enum preProcClass {
 	upperContour = 0, lowerContour = 1,
 	uniformSurface = 2, nonUniformSurface = 3
 
-	, roof, building // temporarily added
+	, roof = 4, building = 5, road = 6 // temporarily added
 };
 
 class OurPoint {

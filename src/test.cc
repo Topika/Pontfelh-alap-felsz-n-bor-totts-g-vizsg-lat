@@ -333,8 +333,8 @@ void buildingDilation(const voronoi_diagram<double> &vd, std::vector<OurPoint> &
 			};
 			if (point.getPreClass() == upperContour || point.getPreClass() == lowerContour)
 			{
+				//if (!point.isBuilding) buildingPoints.push_front(&point);
 				point.setPreClass(building);
-				buildingPoints.push_front(&point);
 				modifyNeighbourPoints(kernelLogic, cell, inputPoints);
 			}
 		};
@@ -364,10 +364,10 @@ long closestBuildingDistance(const OurPoint &otherPoint, long limitX, long limit
 }
 
 float roadLowerLimit() {
-	return MIN_INTENSITY + INTENSITY_INTERVAL * ROAD_MIN;
+	return 10;//MIN_INTENSITY + INTENSITY_INTERVAL * ROAD_MIN;
 }
 float roadUpperLimit() {
-	return MIN_INTENSITY + INTENSITY_INTERVAL * ROAD_MAX;
+	return 60;//MIN_INTENSITY + INTENSITY_INTERVAL * ROAD_MAX;
 }
 
 void finalizeClassification(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints, const std::list<OurPoint*> &buildingPoints) {
@@ -376,8 +376,8 @@ void finalizeClassification(const voronoi_diagram<double> &vd, std::vector<OurPo
 	};
 
 	auto task = [&vd, &inputPoints, &buildingPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {
-		const long limitX_Road = 3 * SCALE_X;
-		const long limitY_Road = 3 * SCALE_Y;
+		const long limitX_Road = 20 * SCALE_X;
+		const long limitY_Road = 20 * SCALE_Y;
 		const long limitX_DenoisingSurface = SCALE_X;
 		const long limitY_DenoisingSurface = SCALE_Y;
 		const long limitX_DenoisingContour = SCALE_X / 4;
@@ -389,7 +389,7 @@ void finalizeClassification(const voronoi_diagram<double> &vd, std::vector<OurPo
 		{
 			dist = closestBuildingDistance(point, limitX_Road, limitY_Road, buildingPoints);
 			if (dist < (limitX_Road * limitY_Road))
-				point.setPreClass(undef);
+				point.setPreClass(road);
 		}
 		else if (point.getPreClass() == upperContour || point.getPreClass() == lowerContour)
 		{
@@ -455,6 +455,7 @@ int translatePreProcClass_lasview(preProcClass ppc)
 	case lowerContour: return 3;
 	case building: return 12;
 	case roof: return 8;
+	case road: return 6;
 	default: return 0;
 	}
 }
@@ -467,7 +468,7 @@ int translatePreProcClass_binary(bool condition)
 int main(int argc, char* argv[]) {
 	std::ifstream ifs;
 
-	ifs.open("../data/sample1.las", std::ios::in | std::ios::binary);
+	ifs.open("../data/citySMALL.las", std::ios::in | std::ios::binary);
 	liblas::ReaderFactory f;
 	liblas::Reader reader = f.CreateWithStream(ifs);
 	liblas::Header const& header = reader.GetHeader();
@@ -481,7 +482,7 @@ int main(int argc, char* argv[]) {
 	SCALE_Z = (long)(1.0 / header.GetScaleZ());
 	PRIMARY_TRESHOLD = 2 * SCALE_Z;
 	SECONDARY_TRESHOLD = PRIMARY_TRESHOLD / 2;
-	ROOF_LOWER_LIMIT = (long)((header.GetMinZ() + (header.GetMaxZ() - header.GetMinZ()) / 4.0) * SCALE_Z);
+	ROOF_LOWER_LIMIT = 2 * PRIMARY_TRESHOLD;// (long)((header.GetMinZ() + (header.GetMaxZ() - header.GetMinZ()) / 4.0) * SCALE_Z);
 
 	std::vector<OurPoint> points;
 	points.reserve(header.GetPointRecordsCount());
@@ -492,13 +493,13 @@ int main(int argc, char* argv[]) {
 	while (reader.ReadNextPoint())
 	{
 		liblas::Point const& p = reader.GetPoint();
-		//if (p.GetReturnNumber() != 1) continue;
+		if (p.GetReturnNumber() != 1) continue;
 		//~ points.push_back(point_data<double>(p.GetX(),p.GetY()));
 		const unsigned short intensity = p.GetIntensity();
 		points.push_back(OurPoint(p.GetRawX(),p.GetRawY(),p.GetRawZ(),p.GetReturnNumber(),intensity));
 		if (firstPoint) { MIN_INTENSITY = intensity; MAX_INTENSITY = intensity; firstPoint = false; }
 		if (intensity < MIN_INTENSITY) MIN_INTENSITY = intensity;
-		if (intensity > MAX_INTENSITY && intensity < 20000) MAX_INTENSITY = intensity; // there is a seemingly invalid value: 28003
+		if (intensity > MAX_INTENSITY/* && intensity < 20000*/) MAX_INTENSITY = intensity; // there is a seemingly invalid value: 28003
 		//~ boost::polygon::insert<OurPoint,voronoi_diagram<double> >(p, &vd);
 
 		//~ std::cout << p.GetX() << ", " << p.GetY() << ", " << p.GetZ() << "\n";
@@ -516,9 +517,10 @@ int main(int argc, char* argv[]) {
 
 	iterateCells(vd, points);
 
-	for (int i = 0; i < 100; ++i) determineRoof(vd, points);
-	for (int i = 0; i < 5; ++i)
-		mergeRoofContour(vd, points); // recursion crashed, maybe stack overflow?
+	for (int i = 0; i < 50; ++i) determineRoof(vd, points);
+	//for (int i = 0; i < 5; ++i)
+	//	mergeRoofContour(vd, points); // recursion crashed, maybe stack overflow?
+	// not practical anymore
 
 	// opening
 	std::cout << "Opening..." << std::endl;
@@ -529,8 +531,8 @@ int main(int argc, char* argv[]) {
 	std::list<OurPoint*> buildingPoints;
 	voronoiClosingDilation(vd, points);
 	voronoiClosingErosion(vd, points, buildingPoints);
-	std::cout << "Building..." << std::endl;
 
+	std::cout << "Building..." << std::endl;
 	buildingDilation(vd, points, buildingPoints);
 	cout << buildingPoints.size() << endl;
 
@@ -540,7 +542,7 @@ int main(int argc, char* argv[]) {
 	finalizeClassification(vd, points, buildingPoints);
 
 
-	std::ofstream ofs("custom_classes_roof.las", ios::out | ios::binary);
+	std::ofstream ofs("custom_classes.las", ios::out | ios::binary);
 	liblas::Writer writer(ofs, header);
 
 	for (auto point : points)
@@ -552,7 +554,7 @@ int main(int argc, char* argv[]) {
 		liblas::Classification customClass;
 		customClass.SetClass(translatePreProcClass_lasview(point.getPreClass()));
 		//customClass.SetClass(translatePreProcClass_binary(point.getPreClass() == building));
-		//customClass.SetClass(translatePreProcClass_binary(point.isBuilding);
+		//customClass.SetClass(translatePreProcClass_binary(point.isBuilding));
 		output.SetClassification(customClass);
 		writer.WritePoint(output);
 	}
