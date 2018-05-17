@@ -18,6 +18,7 @@ class OurPoint {
 		int returns;
 		unsigned short intensity;
 		preProcClass preClass;
+		preProcClass newPreClass;
 
 	//public methods
 	public:
@@ -33,6 +34,7 @@ class OurPoint {
 	int getReturns() const { return returns; }
 	unsigned short getIntensity() const { return intensity; }
 	preProcClass getPreClass() const { return preClass; }
+	preProcClass getNewPreClass() const { return newPreClass; }
 
 	//setters
 	void setX(long x1) { x = x1; }
@@ -41,6 +43,7 @@ class OurPoint {
 	void setReturns(int ret) { returns = ret; }
 	void getIntensity(unsigned short intensity_) { intensity = intensity_; }
 	void setPreClass(preProcClass p1) { preClass = p1; }
+	void setNewPreClass(preProcClass p1) { newPreClass = p1; }
 
 	//other methods
 	long distanceFromInZ(const OurPoint& p2) const {

@@ -409,6 +409,48 @@ void finalizeClassification(const voronoi_diagram<double> &vd, std::vector<OurPo
 	voronoiCellIteration(vd, inputPoints, condition, task);
 }
 
+void majorityFilter(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
+	auto condition = [](const OurPoint &point)->bool {
+		return true;
+	};
+	
+	auto task = [&inputPoints](const voronoi_diagram<double>::cell_type &cell, OurPoint &point) {		
+		const vector<OurPoint> neighbours = getNeighboursOfPoint(cell, inputPoints);
+		vector<int> classNums (8,0);
+		int maxValue = 0;
+		for(auto it = neighbours.begin(); it != neighbours.end(); ++it) {
+			int preClassNum = (*it).getPreClass();
+			classNums[preClassNum+1] += 1;
+			if (classNums[preClassNum+1] > maxValue) {
+				maxValue = classNums[preClassNum+1];	
+			}
+		}
+		if (maxValue >= neighbours.size() / 2)
+			point.setNewPreClass(static_cast<preProcClass>(distance(classNums.begin(), find(classNums.begin(), classNums.end(), maxValue)) - 1));	
+	};
+	
+	bool l = false; int i = 0; int j = 0; //int k = 0;
+	
+	while(!l) {
+		l = true; j = 0;
+		for (auto it = inputPoints.begin(); it != inputPoints.end(); ++it) {
+			(*it).setNewPreClass((*it).getPreClass());	
+		}
+		voronoiCellIteration(vd, inputPoints, condition, task);
+		for(auto it = inputPoints.begin(); it != inputPoints.end(); ++it) {
+			auto tmp = (*it).getNewPreClass();
+			if(tmp != (*it).getPreClass()) {
+				(*it).setPreClass(tmp);	
+				j++;	
+			}
+		}
+		if (j > inputPoints.size()*0.02 ) l = false;
+		//k = j;
+		i++;
+	}
+	cout << "veg   " << i << endl;
+}
+
 void iterateCells(const voronoi_diagram<double> &vd, std::vector<OurPoint> &inputPoints) {
 	//std::ofstream ofs;
 	//ofs.open("file.txt", std::ofstream::out | std::ofstream::app);
@@ -466,104 +508,113 @@ int translatePreProcClass_binary(bool condition)
 }
 
 int main(int argc, char* argv[]) {
-	std::ifstream ifs;
+	if (argc < 3) {
+		cerr << "Need an input and output file name." << endl;
+		return 1;
+	} else {
+		std::string input(argv[1]);
+		std::string output(argv[2]);
+		std::ifstream ifs;
 
-	ifs.open("../data/citySMALL.las", std::ios::in | std::ios::binary);
-	liblas::ReaderFactory f;
-	liblas::Reader reader = f.CreateWithStream(ifs);
-	liblas::Header const& header = reader.GetHeader();
-	std::cout << std::endl << "1) Read 'sample1.las', which has the next information:" << std::endl;
-	std::cout << "Compressed: " << header.Compressed() << '\n';
-	//std::cout << "Signature: " << header.GetFileSignature() << '\n';
-	std::cout << "Points count: " << header.GetPointRecordsCount() << '\n';
+		ifs.open(input, std::ios::in | std::ios::binary);
+		liblas::ReaderFactory f;
+		liblas::Reader reader = f.CreateWithStream(ifs);
+		liblas::Header const& header = reader.GetHeader();
+		std::cout << std::endl << "1) Read 'sample1.las', which has the next information:" << std::endl;
+		std::cout << "Compressed: " << header.Compressed() << '\n';
+		//std::cout << "Signature: " << header.GetFileSignature() << '\n';
+		std::cout << "Points count: " << header.GetPointRecordsCount() << '\n';
 
-	SCALE_X = (long)(1.0 / header.GetScaleX());
-	SCALE_Y = (long)(1.0 / header.GetScaleY());
-	SCALE_Z = (long)(1.0 / header.GetScaleZ());
-	PRIMARY_TRESHOLD = 2 * SCALE_Z;
-	SECONDARY_TRESHOLD = PRIMARY_TRESHOLD / 2;
-	ROOF_LOWER_LIMIT = 2 * PRIMARY_TRESHOLD;// (long)((header.GetMinZ() + (header.GetMaxZ() - header.GetMinZ()) / 4.0) * SCALE_Z);
+		SCALE_X = (long)(1.0 / header.GetScaleX());
+		SCALE_Y = (long)(1.0 / header.GetScaleY());
+		SCALE_Z = (long)(1.0 / header.GetScaleZ());
+		PRIMARY_TRESHOLD = 2 * SCALE_Z;
+		SECONDARY_TRESHOLD = PRIMARY_TRESHOLD / 2;
+		ROOF_LOWER_LIMIT = 2 * PRIMARY_TRESHOLD;// (long)((header.GetMinZ() + (header.GetMaxZ() - header.GetMinZ()) / 4.0) * SCALE_Z);
 
-	std::vector<OurPoint> points;
-	points.reserve(header.GetPointRecordsCount());
-	//~ The voronoi diagram
-	voronoi_diagram<double> vd;
+		std::vector<OurPoint> points;
+		points.reserve(header.GetPointRecordsCount());
+		//~ The voronoi diagram
+		voronoi_diagram<double> vd;
 
-	bool firstPoint = true;
-	while (reader.ReadNextPoint())
-	{
-		liblas::Point const& p = reader.GetPoint();
-		if (p.GetReturnNumber() != 1) continue;
-		//~ points.push_back(point_data<double>(p.GetX(),p.GetY()));
-		const unsigned short intensity = p.GetIntensity();
-		points.push_back(OurPoint(p.GetRawX(),p.GetRawY(),p.GetRawZ(),p.GetReturnNumber(),intensity));
-		if (firstPoint) { MIN_INTENSITY = intensity; MAX_INTENSITY = intensity; firstPoint = false; }
-		if (intensity < MIN_INTENSITY) MIN_INTENSITY = intensity;
-		if (intensity > MAX_INTENSITY/* && intensity < 20000*/) MAX_INTENSITY = intensity; // there is a seemingly invalid value: 28003
-		//~ boost::polygon::insert<OurPoint,voronoi_diagram<double> >(p, &vd);
+		bool firstPoint = true;
+		while (reader.ReadNextPoint())
+		{
+			liblas::Point const& p = reader.GetPoint();
+			if (p.GetReturnNumber() != 1) continue;
+			//~ points.push_back(point_data<double>(p.GetX(),p.GetY()));
+			const unsigned short intensity = p.GetIntensity();
+			points.push_back(OurPoint(p.GetRawX(),p.GetRawY(),p.GetRawZ(),p.GetReturnNumber(),intensity));
+			if (firstPoint) { MIN_INTENSITY = intensity; MAX_INTENSITY = intensity; firstPoint = false; }
+			if (intensity < MIN_INTENSITY) MIN_INTENSITY = intensity;
+			if (intensity > MAX_INTENSITY/* && intensity < 20000*/) MAX_INTENSITY = intensity; // there is a seemingly invalid value: 28003
+			//~ boost::polygon::insert<OurPoint,voronoi_diagram<double> >(p, &vd);
 
-		//~ std::cout << p.GetX() << ", " << p.GetY() << ", " << p.GetZ() << "\n";
+			//~ std::cout << p.GetX() << ", " << p.GetY() << ", " << p.GetZ() << "\n";
+		}
+		INTENSITY_INTERVAL = 1050;//MAX_INTENSITY - MIN_INTENSITY;
+		std::cout << "Intensity interval: " << MIN_INTENSITY << '\t' << MAX_INTENSITY << std::endl;
+		std::cout << std::endl << "--------------------------------------------------------" << std::endl;
+		construct_voronoi(points.begin(), points.end(), &vd);
+
+		std::cout << std::endl << "2) Finished the calculation of voronoi diagram. The result is:" << std::endl; 
+		std::cout << "Number of cells: " << vd.num_cells() << std::endl;
+		std::cout << "Number of edges: " << vd.num_edges() << std::endl;
+		std::cout << std::endl << "--------------------------------------------------------" << std::endl;
+		std::cout << "3) Start to examine all the points and their neighbours, to calculate the first segmentation to surfaces and contours..." << std::endl;
+
+		iterateCells(vd, points);
+
+		for (int i = 0; i < 50; ++i) determineRoof(vd, points);
+		//for (int i = 0; i < 5; ++i)
+		//	mergeRoofContour(vd, points); // recursion crashed, maybe stack overflow?
+		// not practical anymore
+
+		// opening
+		std::cout << "Opening..." << std::endl;
+		voronoiOpeningErosion(vd, points);
+		voronoiOpeningDilation(vd, points);
+		// closing
+		std::cout << "Closing..." << std::endl;
+		std::list<OurPoint*> buildingPoints;
+		voronoiClosingDilation(vd, points);
+		voronoiClosingErosion(vd, points, buildingPoints);
+
+		std::cout << "Building..." << std::endl;
+		buildingDilation(vd, points, buildingPoints);
+		cout << buildingPoints.size() << endl;
+
+		// TODO
+		// O(n^2) is not that good, using buildingPoints instead
+		std::cout << "Road..." << std::endl;
+		finalizeClassification(vd, points, buildingPoints);
+		
+		std::cout << "Majority filter..." << std::endl;
+		majorityFilter(vd, points);
+
+		std::ofstream ofs(output, ios::out | ios::binary);
+		liblas::Writer writer(ofs, header);
+
+		for (auto point : points)
+		{
+			liblas::Point output(&header);
+			output.SetRawX(point.getX());
+			output.SetRawY(point.getY());
+			output.SetRawZ(point.getZ());
+			liblas::Classification customClass;
+			customClass.SetClass(translatePreProcClass_lasview(point.getPreClass()));
+			//customClass.SetClass(translatePreProcClass_binary(point.getPreClass() == building));
+			//customClass.SetClass(translatePreProcClass_binary(point.isBuilding));
+			output.SetClassification(customClass);
+			writer.WritePoint(output);
+		}
+
+		ImageWriter imgwriter(header.GetMinX() / header.GetScaleX(),header.GetMinY() / header.GetScaleY(),header.GetMaxX() / header.GetScaleX() ,header.GetMaxY() / header.GetScaleY());
+		for(auto point : points) {
+			imgwriter.addPoint(point);
+		}
+		imgwriter.writeToFile("outfile.png");
+
+		return 0;
 	}
-	INTENSITY_INTERVAL = 1050;//MAX_INTENSITY - MIN_INTENSITY;
-	std::cout << "Intensity interval: " << MIN_INTENSITY << '\t' << MAX_INTENSITY << std::endl;
-    std::cout << std::endl << "--------------------------------------------------------" << std::endl;
-	construct_voronoi(points.begin(), points.end(), &vd);
-
-	std::cout << std::endl << "2) Finished the calculation of voronoi diagram. The result is:" << std::endl; 
-	std::cout << "Number of cells: " << vd.num_cells() << std::endl;
-	std::cout << "Number of edges: " << vd.num_edges() << std::endl;
-    std::cout << std::endl << "--------------------------------------------------------" << std::endl;
-    std::cout << "3) Start to examine all the points and their neighbours, to calculate the first segmentation to surfaces and contours..." << std::endl;
-
-	iterateCells(vd, points);
-
-	for (int i = 0; i < 50; ++i) determineRoof(vd, points);
-	//for (int i = 0; i < 5; ++i)
-	//	mergeRoofContour(vd, points); // recursion crashed, maybe stack overflow?
-	// not practical anymore
-
-	// opening
-	std::cout << "Opening..." << std::endl;
-	voronoiOpeningErosion(vd, points);
-	voronoiOpeningDilation(vd, points);
-	// closing
-	std::cout << "Closing..." << std::endl;
-	std::list<OurPoint*> buildingPoints;
-	voronoiClosingDilation(vd, points);
-	voronoiClosingErosion(vd, points, buildingPoints);
-
-	std::cout << "Building..." << std::endl;
-	buildingDilation(vd, points, buildingPoints);
-	cout << buildingPoints.size() << endl;
-
-	// TODO
-	// O(n^2) is not that good, using buildingPoints instead
-	std::cout << "Road..." << std::endl;
-	finalizeClassification(vd, points, buildingPoints);
-
-
-	std::ofstream ofs("custom_classes.las", ios::out | ios::binary);
-	liblas::Writer writer(ofs, header);
-
-	for (auto point : points)
-	{
-		liblas::Point output(&header);
-		output.SetRawX(point.getX());
-		output.SetRawY(point.getY());
-		output.SetRawZ(point.getZ());
-		liblas::Classification customClass;
-		customClass.SetClass(translatePreProcClass_lasview(point.getPreClass()));
-		//customClass.SetClass(translatePreProcClass_binary(point.getPreClass() == building));
-		//customClass.SetClass(translatePreProcClass_binary(point.isBuilding));
-		output.SetClassification(customClass);
-		writer.WritePoint(output);
-	}
-
-    ImageWriter imgwriter(header.GetMinX() / header.GetScaleX(),header.GetMinY() / header.GetScaleY(),header.GetMaxX() / header.GetScaleX() ,header.GetMaxY() / header.GetScaleY());
-    for(auto point : points) {
-        imgwriter.addPoint(point);
-    }
-    imgwriter.writeToFile("outfile.png");
-
-	return 0;
 }
